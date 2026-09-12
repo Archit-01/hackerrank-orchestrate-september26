@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# Test caches
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Secrets
+.env
+
+# Submission artifacts (not committed, uploaded separately)
+log.txt
+code.zip
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+output.csv
+temp_eval.txt
+dataset/output.csv
