@@ -133,7 +133,9 @@ def generate_explanation(facts: Dict[str, Any]) -> str:
         latency_ms=latency,
     )
 
+    import re
     explanation = content.strip()
+    explanation = re.sub(r"(?s)<think>.*?</think>\n?", "", explanation).strip()
 
     # --- Post-hoc numeric verifier ---
     allowed_numbers = _facts_to_numeric_tokens(facts)

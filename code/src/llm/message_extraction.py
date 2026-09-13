@@ -68,7 +68,6 @@ def classify_message(
 
     content, in_tok, out_tok, latency = chat_completion(
         messages=messages,
-        response_format={"type": "json_object"},
         max_tokens=128,
         temperature=0.0,
     )
@@ -89,6 +88,7 @@ def _parse_result(content: str) -> Dict:
     default = {"intent": "irrelevant", "new_amount": None, "new_date": None}
 
     text = content.strip()
+    text = re.sub(r"(?s)<think>.*?</think>\n?", "", text).strip()
     text = re.sub(r"^```[a-z]*\n?", "", text)
     text = re.sub(r"\n?```$", "", text)
 
@@ -122,3 +122,51 @@ def _parse_result(content: str) -> Dict:
         new_date = None
 
     return {"intent": intent, "new_amount": new_amount, "new_date": new_date}
+
+def extract_general_message_amendment(message_text: str, categories: list) -> Dict:
+    """
+    Classify a general message that lacks a related_event_id.
+    """
+    cats_str = ", ".join(categories)
+    sys_prompt = f"""You are a financial data extraction assistant.
+A general message has been received that might amend a recurring payment.
+The user's active recurring categories are: {cats_str}
+
+Classify if the message indicates a change to one of these categories.
+Respond ONLY with valid JSON:
+{{
+  "intent": "update_recurring" | "irrelevant",
+  "category": "<matching_category_name>",
+  "new_amount": <number or null>,
+  "effective_date": "<YYYY-MM-DD or null>"
+}}"""
+    
+    messages = [
+        {"role": "system", "content": sys_prompt},
+        {"role": "user", "content": message_text},
+    ]
+
+    content, in_tok, out_tok, latency = chat_completion(
+        messages=messages,
+        max_tokens=128,
+        temperature=0.0,
+    )
+    tracker.record(
+        model=GROQ_TEXT_MODEL,
+        purpose="message_classification",
+        input_tokens=in_tok,
+        output_tokens=out_tok,
+        latency_ms=latency,
+    )
+
+    try:
+        text = content.strip()
+        text = re.sub(r"(?s)<think>.*?</think>\n?", "", text).strip()
+        text = re.sub(r"^```[a-z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+        data = json.loads(text)
+        if data.get("intent") == "update_recurring":
+            return data
+    except Exception:
+        pass
+    return {"intent": "irrelevant"}

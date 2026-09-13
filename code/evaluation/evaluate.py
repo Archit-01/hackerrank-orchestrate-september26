@@ -84,26 +84,25 @@ def main():
         return
 
     # Run pipeline on sample requests
-    print(f"\nRunning pipeline on {len(sample)} sample requests (no LLM)...")
-    try:
-        import subprocess, os
-        result = subprocess.run(
-            [sys.executable, str(_repo_root / "code" / "scripts" / "run_pipeline.py"),
-             "--dataset-dir", str(_repo_root / "dataset"),
-             "--requests", str(sample_path),
-             "--output", str(sample_output_path)],
-            capture_output=True, text=True,
-            env={**os.environ, "PYTHONPATH": str(_repo_root / "code")}
-        )
-        if result.returncode != 0:
-            print("Pipeline stderr:", result.stderr[:500])
-            print("Pipeline stdout:", result.stdout[:500])
-    except Exception as e:
-        print(f"Could not run pipeline: {e}")
+#     print(f"\nRunning pipeline on {len(sample)} sample requests (no LLM)...")
+#     try:
+#         import subprocess, os
+#         result = subprocess.run(
+#             [sys.executable, str(_repo_root / "code" / "scripts" / "run_pipeline.py"),
+#              "--dataset-dir", str(_repo_root / "dataset"),
+#              "--requests", str(sample_path),
+#              "--output", str(sample_output_path)],
+#             capture_output=True, text=True,
+#             env={**os.environ, "PYTHONPATH": str(_repo_root / "code")}
+#         )
+#         if result.returncode != 0:
+#             print("Pipeline stderr:", result.stderr[:500])
+#             print("Pipeline stdout:", result.stdout[:500])
+#     except Exception as e:
+#         print(f"Could not run pipeline: {e}")
 
-    # Load predictions — try sample_output first, then --output arg
-    pred_path = sample_output_path if sample_output_path.exists() else (
-        Path(args.output) if args.output else None
+    pred_path = (
+        Path(args.output) if args.output else (sample_output_path if sample_output_path.exists() else None)
     )
 
     if pred_path is None or not pred_path.exists():

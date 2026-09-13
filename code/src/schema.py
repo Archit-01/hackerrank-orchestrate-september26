@@ -119,10 +119,12 @@ class FinancialEvent(BaseModel):
     @field_validator("event_date", "settlement_date", mode="before")
     @classmethod
     def parse_date(cls, v: object) -> Optional[date]:
+        if v is None:
+            return None
         if isinstance(v, date):
             return v
         s = str(v).strip()
-        if not s:
+        if not s or s.lower() == "none":
             return None  # handled by model_validator below
         return date.fromisoformat(s)
 

@@ -238,6 +238,58 @@ def deduplicate_events(events: List[FinancialEvent]) -> List[FinancialEvent]:
 
 
 # ---------------------------------------------------------------------------
+# General Messages
+# ---------------------------------------------------------------------------
+
+def apply_general_messages(
+    events: List[FinancialEvent], messages: List[Message], use_llm: bool = True
+) -> List[FinancialEvent]:
+    """
+    Look for messages without related_event_id that might cancel/amend recurring events.
+    """
+    if not use_llm:
+        return events
+
+    # Get active recurring categories
+    is_recurring = classify_recurring(events)
+    active_cats = set()
+    for ev in events:
+        if is_recurring.get(ev.event_id) and ev.status in ("settled", "scheduled", "pending"):
+            active_cats.add(ev.category)
+            
+    if not active_cats:
+        return events
+
+    from .llm.message_extraction import extract_general_message_amendment
+    
+    gen_msgs = [m for m in messages if not m.related_event_id]
+    
+    for msg in gen_msgs:
+        try:
+            res = extract_general_message_amendment(msg.message_text, list(active_cats))
+            if res.get("intent") == "update_recurring":
+                cat = res.get("category")
+                new_amt = res.get("new_amount")
+                # Create a synthetic overriding event
+                if cat and new_amt is not None:
+                    # Find the latest event for this category to clone
+                    cat_events = [e for e in events if e.category == cat]
+                    if cat_events:
+                        latest = max(cat_events, key=lambda e: e.settlement_date)
+                        new_ev = FinancialEvent(
+                            **{**latest.model_dump(), 
+                               "event_id": f"synthetic_{msg.message_id}",
+                               "amount": float(new_amt),
+                               "settlement_date": latest.settlement_date,
+                               "event_date": msg.sent_at.date()}
+                        )
+                        events.append(new_ev)
+        except Exception as e:
+            print(f"[reconciliation] Failed processing general message {msg.message_id}: {e}")
+    return events
+
+
+# ---------------------------------------------------------------------------
 # Step 5: Classify recurring vs one-time
 # ---------------------------------------------------------------------------
 
@@ -285,6 +337,11 @@ def classify_recurring(events: List[FinancialEvent]) -> Dict[str, bool]:
             and 1 <= median_gap <= MAX_RECURRING_GAP_DAYS
         )
 
+        latest_event = sorted_group[-1]
+        desc = latest_event.description.lower()
+        if any(word in desc for word in ["final", "cancel", "stop", "close"]):
+            recurring = False
+
         for ev in group:
             is_recurring[ev.event_id] = recurring
 
@@ -322,6 +379,9 @@ def reconcile(
 
     # 4. Apply message amendments
     events = apply_message_amendments(events, messages, use_llm=use_llm)
+
+    # 4b. Apply general messages (cancellations/updates to recurring)
+    events = apply_general_messages(events, messages, use_llm=use_llm)
 
     # 5. Classify recurring
     is_recurring = classify_recurring(events)

@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 from dotenv import load_dotenv
 
 # Load .env from repo root
-_repo_root = Path(__file__).resolve().parents[4]
+_repo_root = Path(__file__).resolve().parents[3]
 load_dotenv(_repo_root / ".env")
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
@@ -22,17 +22,24 @@ GROQ_VISION_MODEL = os.environ.get("GROQ_VISION_MODEL", "")
 # Model preference lists (ordered strongest → weakest)
 # ---------------------------------------------------------------------------
 PREFERRED_TEXT_MODELS = [
+    "openai/gpt-oss-20b",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
+    "groq/compound",
+    "llama-3.1-8b-instant",
+    "llama3-8b-8192",
+    "gemma2-9b-it",
     "llama-3.3-70b-versatile",
     "llama-3.1-70b-versatile",
     "llama3-70b-8192",
     "mixtral-8x7b-32768",
-    "llama3-8b-8192",
-    "gemma2-9b-it",
 ]
 
 PREFERRED_VISION_MODELS = [
-    "llama-3.2-90b-vision-preview",
+    "qwen/qwen3.8-27b",
     "llama-3.2-11b-vision-preview",
+    "llama-3.2-90b-vision-preview",
     "llava-v1.5-7b-4096-preview",
 ]
 
@@ -57,6 +64,7 @@ def auto_discover_models() -> Tuple[str, str]:
     Returns (text_model_id, vision_model_id).
     """
     client = _get_client()
+    import time; time.sleep(2.1)
     available_ids = set()
     try:
         models_resp = client.models.list()
@@ -95,7 +103,14 @@ def chat_completion(
     Returns (content_str, input_tokens, output_tokens, latency_ms).
     """
     client = _get_client()
-    chosen_model = model or GROQ_TEXT_MODEL or PREFERRED_TEXT_MODELS[0]
+    import time; time.sleep(2.1)
+    
+    if model:
+        chosen_model = model
+    elif GROQ_TEXT_MODEL:
+        chosen_model = GROQ_TEXT_MODEL
+    else:
+        chosen_model, _ = auto_discover_models()
 
     kwargs: dict = {
         "model": chosen_model,
@@ -107,7 +122,18 @@ def chat_completion(
         kwargs["response_format"] = response_format
 
     t0 = time.perf_counter()
-    resp = client.chat.completions.create(**kwargs)
+    import groq
+    import re
+    while True:
+        try:
+            resp = client.chat.completions.create(**kwargs)
+            break
+        except groq.RateLimitError as e:
+            msg = str(e)
+            m = re.search(r"Please try again in (\d+\.?\d*)s", msg)
+            wait_time = max(float(m.group(1)) + 0.5, 15.0) if m else 15.0
+            print(f"[client] Rate limit hit. Waiting {wait_time:.2f}s...")
+            time.sleep(wait_time)
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
     content = resp.choices[0].message.content or ""
@@ -127,15 +153,33 @@ def vision_completion(
     Returns (content_str, input_tokens, output_tokens, latency_ms).
     """
     client = _get_client()
-    chosen_model = model or GROQ_VISION_MODEL or PREFERRED_VISION_MODELS[0]
+    import time; time.sleep(2.1)
+    
+    if model:
+        chosen_model = model
+    elif GROQ_VISION_MODEL:
+        chosen_model = GROQ_VISION_MODEL
+    else:
+        _, chosen_model = auto_discover_models()
 
     t0 = time.perf_counter()
-    resp = client.chat.completions.create(
-        model=chosen_model,
-        messages=messages,
-        temperature=0.0,
-        max_tokens=max_tokens,
-    )
+    import groq
+    import re
+    while True:
+        try:
+            resp = client.chat.completions.create(
+                model=chosen_model,
+                messages=messages,
+                max_tokens=max_tokens,
+            )
+            break
+        except groq.RateLimitError as e:
+            msg = str(e)
+            m = re.search(r"Please try again in (\d+\.?\d*)s", msg)
+            wait_time = max(float(m.group(1)) + 0.5, 15.0) if m else 15.0
+            print(f"[client] Rate limit hit. Waiting {wait_time:.2f}s...")
+            time.sleep(wait_time)
+            
     latency_ms = (time.perf_counter() - t0) * 1000.0
 
     content = resp.choices[0].message.content or ""

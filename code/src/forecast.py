@@ -31,11 +31,13 @@ def _project_recurring(
     start_date: date,
     end_date: date,
     period_days: int,
+    conservative_amount: Optional[float] = None,
 ) -> List[Tuple[date, float]]:
     """
     Project a recurring event forward from the LATEST KNOWN occurrence in the dataset.
     Only returns occurrences that fall within [start_date, end_date] AND are strictly
     after the latest_event's settlement_date.
+    Uses conservative_amount if provided, otherwise latest_event.amount.
     """
     occurrences = []
     next_date = latest_event.settlement_date + timedelta(days=period_days)
@@ -46,7 +48,8 @@ def _project_recurring(
 
     while next_date <= end_date:
         if next_date > latest_event.settlement_date:
-            occurrences.append((next_date, latest_event.amount or 0.0))
+            amt = conservative_amount if conservative_amount is not None else (latest_event.amount or 0.0)
+            occurrences.append((next_date, amt))
         next_date = next_date + timedelta(days=period_days)
 
     return occurrences
@@ -93,8 +96,9 @@ def simulate_balance(
     # (user_id, category, direction) -> period_days
     group_periods: Dict[Tuple, int] = _compute_group_periods(events, is_recurring)
     
-    # Find latest event for each recurring group
+    # Find latest event and conservative amount for each recurring group
     latest_recurring_event: Dict[Tuple, FinancialEvent] = {}
+    conservative_amounts: Dict[Tuple, float] = {}
 
     for ev in events:
         if ev.event_id in skip_event_ids or ev.direction == "non_cash" or ev.status not in CASH_FLOW_STATUSES:
@@ -132,7 +136,7 @@ def simulate_balance(
     # Project recurring events forward from their latest known occurrence
     for key, latest_ev in latest_recurring_event.items():
         period = group_periods.get(key, 30)
-        occurrences = _project_recurring(latest_ev, start_date, end_date, period)
+        occurrences = _project_recurring(latest_ev, start_date, end_date, period, None)
         for occ_date, occ_amount in occurrences:
             eff_amt = reduce_event_amounts.get(latest_ev.event_id, occ_amount)
             try:

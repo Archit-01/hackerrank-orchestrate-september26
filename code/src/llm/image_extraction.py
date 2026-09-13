@@ -17,7 +17,7 @@ from typing import Dict, Optional
 from .client import vision_completion, chat_completion, GROQ_VISION_MODEL
 from .usage_tracker import tracker
 
-_DATASET_DIR = Path(__file__).resolve().parents[4] / "dataset"
+_DATASET_DIR = Path(__file__).resolve().parents[3] / "dataset"
 
 
 def _image_path(image_id: str) -> Path:
@@ -85,7 +85,9 @@ def extract_amount_from_image(image_id: str, event_currency: str) -> Optional[Di
         return None
 
     # --- Primary: Vision API ---
-    if GROQ_VISION_MODEL and GROQ_VISION_MODEL != "ocr_fallback":
+    from .client import auto_discover_models
+    vision_model = GROQ_VISION_MODEL or auto_discover_models()[1]
+    if vision_model and vision_model != "ocr_fallback":
         try:
             messages = [
                 {
@@ -101,9 +103,9 @@ def extract_amount_from_image(image_id: str, event_currency: str) -> Optional[Di
                     ],
                 }
             ]
-            content, in_tok, out_tok, latency = vision_completion(messages=messages, max_tokens=128)
+            content, in_tok, out_tok, latency = vision_completion(messages=messages, model=vision_model, max_tokens=128)
             tracker.record(
-                model=GROQ_VISION_MODEL,
+                model=vision_model,
                 purpose="vision",
                 input_tokens=in_tok,
                 output_tokens=out_tok,
@@ -142,7 +144,6 @@ def _ocr_fallback(image_id: str, img_b64: str, event_currency: str) -> Optional[
         ]
         content, in_tok, out_tok, latency = chat_completion(
             messages=messages,
-            response_format={"type": "json_object"},
             max_tokens=128,
         )
         tracker.record(
