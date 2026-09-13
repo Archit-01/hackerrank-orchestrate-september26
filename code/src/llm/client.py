@@ -18,30 +18,19 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_TEXT_MODEL = os.environ.get("GROQ_TEXT_MODEL", "")
 GROQ_VISION_MODEL = os.environ.get("GROQ_VISION_MODEL", "")
 
-_EXHAUSTED_MODELS: set = {"groq/compound", "openai/gpt-oss-20b"}
+_EXHAUSTED_MODELS: set = {"groq/compound", "groq/compound-mini", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"}
 
 # ---------------------------------------------------------------------------
 # Model preference lists (ordered strongest → weakest)
 # ---------------------------------------------------------------------------
 PREFERRED_TEXT_MODELS = [
-    "qwen/qwen3.8-27b",
-    "openai/gpt-oss-120b",
     "qwen/qwen3.6-27b",
+    "openai/gpt-oss-120b",
     "allam-2-7b",
-    "llama-3.1-8b-instant",
-    "llama3-8b-8192",
-    "gemma2-9b-it",
-    "llama-3.3-70b-versatile",
-    "llama-3.1-70b-versatile",
-    "llama3-70b-8192",
-    "mixtral-8x7b-32768",
 ]
 
 PREFERRED_VISION_MODELS = [
-    "qwen/qwen3.8-27b",
-    "llama-3.2-11b-vision-preview",
-    "llama-3.2-90b-vision-preview",
-    "llava-v1.5-7b-4096-preview",
+    "qwen/qwen3.6-27b",
 ]
 
 
@@ -119,6 +108,8 @@ def chat_completion(
         "temperature": temperature,
         "max_tokens": max_tokens,
     }
+    if "qwen" in chosen_model.lower():
+        kwargs["reasoning_effort"] = "none"
     if response_format:
         kwargs["response_format"] = response_format
 
@@ -181,13 +172,17 @@ def vision_completion(
     t0 = time.perf_counter()
     import groq
     import re
+    v_kwargs: dict = {
+        "model": chosen_model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    }
+    if "qwen" in chosen_model.lower():
+        v_kwargs["reasoning_effort"] = "none"
+
     while True:
         try:
-            resp = client.chat.completions.create(
-                model=chosen_model,
-                messages=messages,
-                max_tokens=max_tokens,
-            )
+            resp = client.chat.completions.create(**v_kwargs)
             break
         except groq.RateLimitError as e:
             msg = str(e)
