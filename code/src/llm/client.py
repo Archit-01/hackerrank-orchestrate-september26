@@ -22,11 +22,11 @@ GROQ_VISION_MODEL = os.environ.get("GROQ_VISION_MODEL", "")
 # Model preference lists (ordered strongest → weakest)
 # ---------------------------------------------------------------------------
 PREFERRED_TEXT_MODELS = [
-    "openai/gpt-oss-20b",
+    "groq/compound",
+    "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
     "qwen/qwen3.6-27b",
-    "qwen/qwen3.8-27b",
-    "groq/compound",
+    "openai/gpt-oss-20b",
     "llama-3.1-8b-instant",
     "llama3-8b-8192",
     "gemma2-9b-it",
@@ -130,6 +130,21 @@ def chat_completion(
             break
         except groq.RateLimitError as e:
             msg = str(e)
+            if "tokens per day" in msg.lower() or "tpd" in msg.lower() or "requests per day" in msg.lower():
+                curr_model = kwargs.get("model")
+                next_model = None
+                try:
+                    curr_idx = PREFERRED_TEXT_MODELS.index(curr_model)
+                    if curr_idx + 1 < len(PREFERRED_TEXT_MODELS):
+                        next_model = PREFERRED_TEXT_MODELS[curr_idx + 1]
+                except ValueError:
+                    next_model = PREFERRED_TEXT_MODELS[0] if PREFERRED_TEXT_MODELS else None
+
+                if next_model and next_model != curr_model:
+                    print(f"[client] Model {curr_model} reached daily quota. Switching to {next_model}...")
+                    kwargs["model"] = next_model
+                    time.sleep(1.0)
+                    continue
             m = re.search(r"Please try again in (\d+\.?\d*)s", msg)
             wait_time = max(float(m.group(1)) + 0.5, 15.0) if m else 15.0
             print(f"[client] Rate limit hit. Waiting {wait_time:.2f}s...")
