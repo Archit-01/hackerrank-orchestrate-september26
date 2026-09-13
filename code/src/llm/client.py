@@ -18,15 +18,16 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_TEXT_MODEL = os.environ.get("GROQ_TEXT_MODEL", "")
 GROQ_VISION_MODEL = os.environ.get("GROQ_VISION_MODEL", "")
 
+_EXHAUSTED_MODELS: set = {"groq/compound", "openai/gpt-oss-20b"}
+
 # ---------------------------------------------------------------------------
 # Model preference lists (ordered strongest → weakest)
 # ---------------------------------------------------------------------------
 PREFERRED_TEXT_MODELS = [
-    "groq/compound",
     "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
     "qwen/qwen3.6-27b",
-    "openai/gpt-oss-20b",
+    "allam-2-7b",
     "llama-3.1-8b-instant",
     "llama3-8b-8192",
     "gemma2-9b-it",
@@ -76,7 +77,7 @@ def auto_discover_models() -> Tuple[str, str]:
     # Select text model
     text_model = PREFERRED_TEXT_MODELS[0]  # default
     for candidate in PREFERRED_TEXT_MODELS:
-        if candidate in available_ids:
+        if candidate in available_ids and candidate not in _EXHAUSTED_MODELS:
             text_model = candidate
             break
 
